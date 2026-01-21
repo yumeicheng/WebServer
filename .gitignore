@@ -1,0 +1,14 @@
+# 编译产物
+build/
+cmake-build-debug/
+cmake-build-release/
+bin/
+*.o
+server
+
+# IDE 相关
+.idea/
+.vscode/
+
+# 数据库密码/敏感信息（如果有独立配置文件的话）
+*.log
