@@ -16,6 +16,7 @@
 #include <cerrno>
 #include "ThreadPool.h"
 #include "Epoller.h"
+#include "SafeQueue.h"
 
 using namespace std;
 

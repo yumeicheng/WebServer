@@ -35,3 +35,11 @@ bool HttpReqest::parse(Buffer& buff)
     }
     return true;
 }
+
+void HttpReqest::ParseHeader_(const std::string& line)
+{
+    size_t pos1 = line.find(':');
+    std::string key = line.substr(0,pos1);
+    std::string value = line.substr(pos1+1,line.size()-pos1-1);
+    header_[key] = value;
+}
