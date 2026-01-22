@@ -49,6 +49,15 @@ public:
     //真正的读取接口：从socket读入
     ssize_t ReadFd(int fd, int *saveErrno);
 
+    void Append(const std::string& str);
+    void Append(const char* str, size_t len);
+    void Append(const void* data, size_t len);
+
+    void RetrieveAll() {
+        readPos_ = 0;
+        writePos_ = 0;
+    }
+
 private:
     std::vector<char> buffer_;
     std::atomic<size_t>readPos_;                //已处理的数据

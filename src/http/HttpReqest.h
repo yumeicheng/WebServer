@@ -21,6 +21,8 @@ public:
         FINISH
     };
 
+    PARSE_STATE state() const { return state_; }
+
     HttpReqest() {Init();}
     void Init();
 

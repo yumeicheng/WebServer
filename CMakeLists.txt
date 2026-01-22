@@ -4,7 +4,8 @@ project(WebServer)
 set(CMAKE_CXX_STANDARD 20)
 
 include_directories(src/base
-                    src/net)
+                    src/net
+                    src/http)
 
 add_executable(WebServer main.cpp
         src/base/SafeQueue.h
@@ -18,6 +19,12 @@ add_executable(WebServer main.cpp
         src/net/Buffer.h
         src/http/HttpReqest.cpp
         src/http/HttpReqest.h
+        src/base/Timer.cpp
+        src/base/Timer.h
+        src/http/HttpResponse.cpp
+        src/http/HttpResponse.h
+        src/pool/SqlConnPool.cpp
+        src/pool/SqlConnPool.h
 )
 
-target_link_libraries(WebServer pthread)
+target_link_libraries(WebServer pthread mysqlclient)  # Link with pthread and mysqlclient

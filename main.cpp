@@ -1,128 +1,134 @@
 #include <iostream>
 #include <vector>
-#include <thread>
-#include <queue>
-#include <mutex>
-#include <condition_variable>
-#include <functional>
-#include <string>
-#include <sstream>
-#include <cstring>
-#include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <sys/epoll.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <string.h>
 #include <fcntl.h>
-#include <cerrno>
 #include "ThreadPool.h"
 #include "Epoller.h"
-#include "SafeQueue.h"
+#include "HttpConn.h"
+#include "Timer.h"
 
 using namespace std;
 
+const int MAX_FD = 65535;
 
-// ==========================================
-// 3. 工具函数
-// ==========================================
-void set_nonblocking(int fd) {
-    int flags = fcntl(fd, F_GETFL, 0);
-    fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-}
-
-// 重点：重新激活 EPOLLONESHOT 屏蔽的 FD
-void reset_oneshot(int epfd, int fd) {
-    struct epoll_event ev;
-    ev.data.fd = fd;
-    ev.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
-    epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ev);
-}
-
-// 重点：贪婪读取 (ET模式必须一次读干净)
-bool read_all(int fd, string& res) {
-    char buf[1024];
-    while (true) {
-        ssize_t n = recv(fd, buf, sizeof(buf), 0);
-        if (n > 0) {
-            res.append(buf, n);
-        } else if (n == 0) {
-            return false; // 对方关了
-        } else {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) return true; // 读完了
-            return false; // 出错
-        }
+void CloseConn(HttpConn *user) {
+    if (user) {
+        user->Close();
     }
 }
 
-// ==========================================
-// 4. 业务逻辑 (工人执行)
-// ==========================================
-void handle_client(int conn_fd, int epfd) {
-    string request;
-    if (read_all(conn_fd, request)) {
-        // 极简 HTTP 解析与响应
-        string body = "<h1>C++ High Performance Server V2.0</h1>";
-        string response = "HTTP/1.1 200 OK\r\n"
-                          "Content-Type: text/html\r\n"
-                          "Content-Length: " + to_string(body.size()) + "\r\n"
-                          "\r\n" + body;
-
-        send(conn_fd, response.c_str(), response.size(), 0);
-
-        // 重点：处理完业务，重新激活该 FD 的监听
-        reset_oneshot(epfd, conn_fd);
-    } else {
-        // 对方断开或出错，直接关闭，不 MOD
-        close(conn_fd);
-    }
+// !!! 将文件描述符设为非阻塞（这是 ET 模式的硬性要求）
+int SetNonBlocking(int fd) {
+    int old_option = fcntl(fd, F_GETFL);
+    int new_option = old_option | O_NONBLOCK;
+    fcntl(fd, F_SETFL, new_option);
+    return old_option;
 }
 
-// ==========================================
-// 5. 主循环 (Reactor)
-// ==========================================
 int main() {
-    Epoller epoller(1024);
-    int port = 9090; // 使用 9090 避免冲突
-    int listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+    int port = 9090;
 
+    Epoller epoller(1024);
+    ThreadPool pool(8);
+    HeapTimer timer;
+
+    vector<HttpConn> users(MAX_FD);
+    HttpConn::epollFd = epoller.GetEpollFd();
+
+    // 1. 创建监听 Socket
+    int listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if(listen_fd < 0) {
+        perror("socket error");
+        return -1;
+    }
+
+    // 2. 端口复用
     int opt = 1;
     setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
-    sockaddr_in addr{};
+    // 3. 绑定与监听
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
     addr.sin_port = htons(port);
-    addr.sin_addr.s_addr = INADDR_ANY;
 
-    bind(listen_fd, (sockaddr*)&addr, sizeof(addr));
-    listen(listen_fd, 1024);
-    set_nonblocking(listen_fd);
+    if(bind(listen_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        perror("bind error");
+        return -1;
+    }
 
-    epoller.AddFd(listen_fd,EPOLLIN | EPOLLET);
-    ThreadPool pool(8); // 8个工人
+    if(listen(listen_fd, 5) < 0) {
+        perror("listen error");
+        return -1;
+    }
+
+    // !!! 关键修改点 1：必须先设为非阻塞，再加入 epoll
+    SetNonBlocking(listen_fd);
+    epoller.AddFd(listen_fd, EPOLLIN | EPOLLET);
+
     cout << "Server started on port " << port << "..." << endl;
 
     while (true) {
-        int eventCnt = epoller.Wait(-1);
+        int timeMS = timer.GetNextTick();
+        int eventCnt = epoller.Wait(timeMS);
+
         for (int i = 0; i < eventCnt; ++i) {
             int fd = epoller.GetEventFd(i);
+            uint32_t events = epoller.GetEvents(i);
 
             if (fd == listen_fd) {
-                // 重点：贪婪 Accept (解决 1.45 req/s 的关键)
-                while (true) {
-                    struct sockaddr_in client{};
-                    socklen_t len = sizeof(client);
-                    int conn_fd = accept(listen_fd, (sockaddr*)&client, &len);
-                    if (conn_fd == -1) {
-                        if (errno == EAGAIN || errno == EWOULDBLOCK) break;
-                        break;
+                struct sockaddr_in client_addr;
+                socklen_t client_addr_len = sizeof(client_addr);
+                // !!! 关键修改点 2：ET模式必须循环 accept 直到返回 EAGAIN
+                while(true) {
+                    int conn_fd = accept(listen_fd, (struct sockaddr*)&client_addr, &client_addr_len);
+                    if(conn_fd <= 0) break;
+
+                    if(conn_fd >= MAX_FD) {
+                        close(conn_fd);
+                        continue;
                     }
-                    set_nonblocking(conn_fd);
-                    epoller.AddFd(conn_fd,EPOLLIN | EPOLLET | EPOLLONESHOT);
+
+                    // !!! 关键修改点 3：新连接也必须设为非阻塞
+                    SetNonBlocking(conn_fd);
+
+                    users[conn_fd].init(conn_fd, client_addr);
+                    epoller.AddFd(conn_fd, EPOLLIN | EPOLLET | EPOLLONESHOT);
+                    timer.add(conn_fd, 60000, std::bind(CloseConn, &users[conn_fd]));
+
+                    cout << "New Client connected, fd: " << conn_fd << endl;
                 }
-            } else {
-                // 业务数据到来
-                int epoll_fd = epoller.GetEpollFd();
-                pool.enqueue([fd, epoll_fd] {
-                    handle_client(fd, epoll_fd);
+            }
+            else if (events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)) {
+                timer.doWork(fd);
+            }
+            else if (events & EPOLLIN) {
+                timer.adjust(fd, 60000);
+                pool.enqueue([&users, fd] {
+                    users[fd].process();
+                });
+            }
+            else if (events & EPOLLOUT)
+            {
+                timer.adjust(fd, 60000);
+                pool.enqueue([&users, fd] {
+                    int error = 0;
+                    if(users[fd].Write(&error) < 0) {
+                        users[fd].Close();
+                    } else {
+                        // 写完之后，通常我们要重新监听读事件（长连接）
+                        // 或者直接 Close（短连接）
+                        // 这里我们先重新监听读
+                        struct epoll_event ev = {0};
+                        ev.data.fd = fd;
+                        ev.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+                        epoll_ctl(HttpConn::epollFd, EPOLL_CTL_MOD, fd, &ev);
+                    }
                 });
             }
         }
