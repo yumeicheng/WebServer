@@ -11,6 +11,7 @@
 #include "HttpConn.h"
 #include "Timer.h"
 #include "SqlConnPool.h"
+#include "Log.h"
 
 using namespace std;
 
@@ -31,6 +32,10 @@ int SetNonBlocking(int fd) {
 }
 
 int main() {
+    //初始化日志：等级1（INFO），存放路径./log，后缀.log，队列容量1024
+    Log::Instance()->init(1,"./log",".log",1024);
+
+    LOG_INFO("==================Server init=========================");
     int port = 9090;
 
     Epoller epoller(1024);
@@ -40,7 +45,7 @@ int main() {
     vector<HttpConn> users(MAX_FD);
     HttpConn::epollFd = epoller.GetEpollFd();
 
-    SqlConnPool::Instance()->Instance()->Init("localhost", 3306, "root", "123456", "webdb", 10);
+    SqlConnPool::Instance()->Init("localhost", 3306, "root", "123456", "webdb", 10);
 
     // 1. 创建监听 Socket
     int listen_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -74,7 +79,7 @@ int main() {
     SetNonBlocking(listen_fd);
     epoller.AddFd(listen_fd, EPOLLIN | EPOLLET);
 
-    cout << "Server started on port " << port << "..." << endl;
+    LOG_INFO("Server started on port %d",port);
 
     while (true) {
         int timeMS = timer.GetNextTick();
@@ -104,7 +109,7 @@ int main() {
                     epoller.AddFd(conn_fd, EPOLLIN | EPOLLET | EPOLLONESHOT);
                     timer.add(conn_fd, 60000, std::bind(CloseConn, &users[conn_fd]));
 
-                    cout << "New Client connected, fd: " << conn_fd << endl;
+                    LOG_INFO("New Client connected, fd: %d", conn_fd);
                 }
             }
             else if (events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)) {

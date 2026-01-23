@@ -45,7 +45,8 @@ void HttpConn::process() {
                 // 获取解析出来的用户名密码
                 std::string name = request_.GetPost("user");
                 std::string pwd = request_.GetPost("password");
-                std::cout << "DEBUG: Login attempt - User: " << name << " Pwd: " << pwd << std::endl;
+                LOG_INFO("DEBUG: Login attempt - User: %s",name.c_str(),"Pwd: %s",pwd.c_str());
+
 
                 if(UserVerify(name, pwd)) {
                     path = "/welcome.html"; // 登录成功，去欢迎页

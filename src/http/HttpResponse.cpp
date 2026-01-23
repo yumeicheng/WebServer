@@ -30,10 +30,10 @@ HttpResponse::~HttpResponse() { UnmapFile(); }
 void HttpResponse::MakeResponse(Buffer& buff) {
 
     std::string fullPath = srcDir_ + path_; // 拼接完整路径
-    std::cout << "DEBUG: Trying to open file: " << fullPath << std::endl; // 打印出来看看
+    LOG_INFO("DEBUG: Trying to open file: %d", fullPath.c_str());
 
     if(stat(fullPath.c_str(), &mmFileStat_) < 0 || S_ISDIR(mmFileStat_.st_mode)) {
-        std::cout << "DEBUG: stat failed!" << std::endl;
+        LOG_INFO("DEBUG: stat failed!");
         code_ = 404;
     }
 

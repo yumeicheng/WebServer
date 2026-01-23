@@ -15,6 +15,7 @@
 #include "HttpReqest.h"
 #include "Epoller.h"
 #include "SqlConnPool.h"
+#include "Log.h"
 
 class HttpConn
 {

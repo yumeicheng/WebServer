@@ -76,3 +76,10 @@ void Buffer::Append(const char* str, size_t len) {
     std::copy(str, str + len, buffer_.begin() + writePos_);
     writePos_ += len;
 }
+
+std::string Buffer::RetrieveAllToStr()
+{
+    std::string str(Peek(), ReadableBytes());
+    RetrieveAll();
+    return str;
+}

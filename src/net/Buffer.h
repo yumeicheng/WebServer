@@ -53,6 +53,9 @@ public:
     void Append(const char* str, size_t len);
     void Append(const void* data, size_t len);
 
+    char* BeginWrite() { return &buffer_[writePos_]; }
+    std::string RetrieveAllToStr();
+
     void RetrieveAll() {
         readPos_ = 0;
         writePos_ = 0;

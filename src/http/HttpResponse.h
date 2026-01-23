@@ -11,6 +11,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include "Buffer.h"
+#include "Log.h"
 
 class HttpResponse {
 public:
