@@ -55,7 +55,7 @@ void HttpConn::process() {
                 }
             }else if (path == "/" || path == "/index.html") path = "/index.html";
 
-            response_.Init("../resources", path, true, 200);
+            response_.Init("../resources", path, false, 200);
             response_.MakeResponse(writeBuffer_);
 
             // 重置请求解析器，准备处理同一个连接的下一个请求

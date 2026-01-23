@@ -33,7 +33,7 @@ int SetNonBlocking(int fd) {
 
 int main() {
     //初始化日志：等级1（INFO），存放路径./log，后缀.log，队列容量1024
-    Log::Instance()->init(1,"./log",".log",1024);
+    Log::Instance()->init(3,"./log",".log",1024);
 
     LOG_INFO("==================Server init=========================");
     int port = 9090;
@@ -121,20 +121,35 @@ int main() {
                     users[fd].process();
                 });
             }
-            else if (events & EPOLLOUT)
-            {
+            else if (events & EPOLLOUT) {
                 timer.adjust(fd, 60000);
                 pool.enqueue([&users, fd] {
                     int error = 0;
-                    if(users[fd].Write(&error) < 0) {
+                    ssize_t ret = users[fd].Write(&error);
+
+                    if(ret < 0) {
+                        // 真的出错了（比如 EPIPE），直接关闭
+                        if(error != EAGAIN) {
+                            users[fd].Close();
+                        } else {
+                            // 缓冲区满了，下次再写
+                            struct epoll_event ev = {0};
+                            ev.data.fd = fd;
+                            ev.events = EPOLLOUT | EPOLLET | EPOLLONESHOT;
+                            epoll_ctl(HttpConn::epollFd, EPOLL_CTL_MOD, fd, &ev);
+                        }
+                    }
+                    else if(ret == 0) {
+                        // 【关键修改】返回 0 代表数据全部写完了！
+                        // 为了压测，我们发完就关（短连接），不要再监听 EPOLLIN 了
                         users[fd].Close();
-                    } else {
-                        // 写完之后，通常我们要重新监听读事件（长连接）
-                        // 或者直接 Close（短连接）
-                        // 这里我们先重新监听读
+                    }
+                    else {
+                        // ret > 0 但没返回 0，说明还没写完（大文件），继续注册写事件
+                        // (注意：你的 Write 实现里如果一次写完返回的是 0，所以这里通常不会进，但为了保险起见)
                         struct epoll_event ev = {0};
                         ev.data.fd = fd;
-                        ev.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+                        ev.events = EPOLLOUT | EPOLLET | EPOLLONESHOT;
                         epoll_ctl(HttpConn::epollFd, EPOLL_CTL_MOD, fd, &ev);
                     }
                 });
