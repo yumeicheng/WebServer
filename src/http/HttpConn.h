@@ -14,6 +14,7 @@
 #include "HttpResponse.h"
 #include "HttpReqest.h"
 #include "Epoller.h"
+#include "SqlConnPool.h"
 
 class HttpConn
 {
@@ -31,7 +32,7 @@ public:
     void process();
 
     //专门负责写数据
-    bool write();
+    //bool write();
 
     //供 main 函数调用发送数据
     ssize_t Write(int* saveErrno);

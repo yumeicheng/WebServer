@@ -33,6 +33,9 @@ public:
     std::string path() const {return path_;}
     std::string method() const {return method_;}
 
+    // 通过 key 获取 POST 里的值 (比如输入 "user" 返回 "admin")
+    std::string GetPost(const std::string& key) const;
+
 private:
     bool ParseRequestLine_(const std::string& line);
     void ParseHeader_(const std::string& line);
@@ -41,6 +44,7 @@ private:
     PARSE_STATE state_;
     std::string method_, path_, version_, body_;
     std::unordered_map<std::string, std::string> header_;
+    std::unordered_map<std::string, std::string> post_;
 };
 
 

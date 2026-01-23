@@ -10,6 +10,7 @@
 #include "Epoller.h"
 #include "HttpConn.h"
 #include "Timer.h"
+#include "SqlConnPool.h"
 
 using namespace std;
 
@@ -38,6 +39,8 @@ int main() {
 
     vector<HttpConn> users(MAX_FD);
     HttpConn::epollFd = epoller.GetEpollFd();
+
+    SqlConnPool::Instance()->Instance()->Init("localhost", 3306, "root", "123456", "webdb", 10);
 
     // 1. 创建监听 Socket
     int listen_fd = socket(AF_INET, SOCK_STREAM, 0);

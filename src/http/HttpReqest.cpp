@@ -88,6 +88,7 @@ void HttpReqest::Init()
     method_ = path_ = version_ = body_ = "";
     state_ = REQUEST_LINE;
     header_.clear();
+    post_.clear();
 }
 
 bool HttpReqest::ParseRequestLine_(const std::string& line)
@@ -107,5 +108,38 @@ bool HttpReqest::ParseRequestLine_(const std::string& line)
 
 void HttpReqest::ParseBody_(const std::string& line)
 {
-    body_ = line;
+    if(line.empty()) { return; }
+
+    // POST 数据通常是: user=admin&password=123456
+    // 我们需要解析并存入 map
+    std::string key, value;
+    int num = 0;
+    int n = line.size();
+    int i = 0, j = 0;
+
+    for(; i < n; i++) {
+        char ch = line[i];
+        switch (ch) {
+        case '=':
+            key = line.substr(j, i - j);
+            j = i + 1;
+            break;
+        case '&':
+            value = line.substr(j, i - j);
+            j = i + 1;
+            post_[key] = value; // 存入一个 unordered_map<string, string> post_
+            break;
+        default:
+            break;
+        }
+    }
+    if(post_.count(key) <= 0 && j < i) {
+        value = line.substr(j, i - j);
+        post_[key] = value;
+    }
+}
+
+std::string HttpReqest::GetPost(const std::string& key) const {
+    if(post_.count(key) > 0) return post_.at(key);
+    return "";
 }

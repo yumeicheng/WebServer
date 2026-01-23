@@ -38,7 +38,7 @@ void SqlConnPool::Init(const char* host, int port,
 MYSQL* SqlConnPool::GetConn() {
     MYSQL *sql = nullptr;
     if(connQue_.empty()){
-        // 如果池子空了，这里会阻塞，直到有人还连接
+        // 如果池子空了，这里会阻塞，等待信号量
         sem_wait(&semId_);
     }
     // 信号量减 1
@@ -69,4 +69,9 @@ void SqlConnPool::ClosePool() {
 
 SqlConnPool::~SqlConnPool() {
     ClosePool();
+}
+
+int SqlConnPool::GetFreeConnCount() {
+    std::lock_guard<std::mutex> locker(mtx_);
+    return connQue_.size();
 }

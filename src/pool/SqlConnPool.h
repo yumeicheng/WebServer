@@ -18,9 +18,9 @@ public:
     // 获取单例实例
     static SqlConnPool *Instance();
 
-    MYSQL *GetConn();          // 借一只铲子（连接）
-    void FreeConn(MYSQL * conn); // 还一只铲子
-    int GetFreeConnCount();    // 看看池子里还剩多少
+    MYSQL *GetConn();          // 获取一个连接
+    void FreeConn(MYSQL * conn); // 释放一个连接回池子
+    int GetFreeConnCount();    // 获取空闲连接数
 
     void Init(const char* host, int port,
               const char* user, const char* pwd,
@@ -35,9 +35,9 @@ private:
     int useCount_;
     int freeCount_;
 
-    std::queue<MYSQL *> connQue_;
-    std::mutex mtx_;
-    sem_t semId_; // 信号量：用于阻塞等待空闲连接
+    std::queue<MYSQL *> connQue_;               //连接队列
+    std::mutex mtx_;                            //队列锁
+    sem_t semId_;                               // 信号量：用于阻塞等待空闲连接
 };
 
 /* RAII 机制：利用局部对象的生命周期来管理连接 */

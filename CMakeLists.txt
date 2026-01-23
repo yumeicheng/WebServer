@@ -5,7 +5,8 @@ set(CMAKE_CXX_STANDARD 20)
 
 include_directories(src/base
                     src/net
-                    src/http)
+                    src/http
+                    src/pool)
 
 add_executable(WebServer main.cpp
         src/base/SafeQueue.h
